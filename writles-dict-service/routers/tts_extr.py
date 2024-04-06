@@ -75,6 +75,7 @@ async def tts(voice:str=Query(None), text:str=Query(None)):
 
     
     seq = _text_to_sequence(text)
+    print(seq)
     text_lengths = np.array([len(seq)], dtype=np.int64)
     seq = np.array([seq], dtype=np.int64)
 
@@ -121,6 +122,7 @@ def _text_to_sequence(text):
 async def _run_onnx(ort_session, input_vals):
     ort_inputs = {name.name: val for name, val in zip(ort_session.get_inputs(), input_vals)}
     ort_outs = ort_session.run(None, ort_inputs)
+    print(len(ort_outs[0]))
     return ort_outs[0]
 
 

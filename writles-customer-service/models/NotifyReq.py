@@ -5,10 +5,11 @@ from typing import List
 
 class Eh(BaseModel):
     title: str | None = None 
-    body: str
+    body: str  | None = None 
     
 class NotifyReq(BaseModel):
     title: str
     body: str
-    obj : Eh
+    obj : Eh | None = None
     token : List[str]
+    date:str | None = None

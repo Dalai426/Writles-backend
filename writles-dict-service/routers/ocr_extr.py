@@ -21,7 +21,6 @@ async def ocr(img: UploadFile | None = None):
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             try :
                 str_result=pytesseract.image_to_string(img, lang="mon", config="--psm 6 --oem 1")
-                print(str_result)
                 return Response(content=str_result, media_type="text/html; charset=utf-8")
             except Exception as e:
                 print(e)
