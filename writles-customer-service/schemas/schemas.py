@@ -1,4 +1,7 @@
 def userEntity(item) -> dict:
+
+    if item is None :
+        return {}
     return {
         "id":str(item["_id"]),
         "name":item["name"],
@@ -25,3 +28,15 @@ def groupEntity(item) -> dict:
             "username":item["username"],
             "password":item["password"],     
         }
+    
+def groupEntityWithoutPasss(item) -> dict:
+    if item is None:
+        return {}
+    else:
+        return {
+            "id":str(item["_id"]),
+            "username":item["username"]     
+        }
+    
+def groupListEntity(groups) -> list:
+    return [groupEntityWithoutPasss(group) for group in groups]

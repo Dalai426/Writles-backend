@@ -31,5 +31,16 @@ class TokenObj(BaseModel):
     name:str | None=None
     device_token:str
 
+class Token(BaseModel):
+    id: str
+    username: str
+    name:str | None=None
+    device_token:str
+
+
+class ChangePass(BaseModel):
+    userId: str
+    newPassword: str
+
 
 

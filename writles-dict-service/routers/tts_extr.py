@@ -9,6 +9,7 @@ import onnxruntime as ort
 import io
 import os
 from typing import Annotated
+from datetime import datetime, timedelta
 
 
 _pad = '_'
@@ -28,28 +29,30 @@ _whitespace_re = re.compile(r'\s+')
 
 
 tts_onnx_female3 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s.onnx' % "female3"))
-vocoder_onnx_female3 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s_vocoderv3.onnx' % "female3"))
+vocoder_onnx_female3 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s_vocoder.onnx' % "female3"))
 
 tts_onnx_female1 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s.onnx' % "female1"))
-vocoder_onnx_female1 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s_vocoderv3.onnx' % "female1"))
+vocoder_onnx_female1 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s_vocoder.onnx' % "female1"))
 
 tts_onnx_female2 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s.onnx' % "female2"))
-vocoder_onnx_female2 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s_vocoderv3.onnx' % "female2"))
+vocoder_onnx_female2 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s_vocoder.onnx' % "female2"))
 
 tts_onnx_male1 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s.onnx' % "male1"))
-vocoder_onnx_male1 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s_vocoderv3.onnx' % "male1"))
+vocoder_onnx_male1 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s_vocoder.onnx' % "male1"))
 
 tts_onnx_male2 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s.onnx' % "male2"))
-vocoder_onnx_male2 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s_vocoderv3.onnx' % "male2"))
+vocoder_onnx_male2 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s_vocoder.onnx' % "male2"))
 
 tts_onnx_male3 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s.onnx' % "male3"))
-vocoder_onnx_male3 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s_vocoderv3.onnx' % "male3"))
-print("dalai")
+vocoder_onnx_male3 = ort.InferenceSession(os.path.join(os.path.dirname(__file__), 'onnx_models', '%s_vocoder.onnx' % "male3"))
+
 
 router=APIRouter(prefix="/tts")
 
 @router.get("/extract",dependencies=[Security(check_key)])
 async def tts(voice:str=Query(None), text:str=Query(None)):
+
+    print(datetime.now())
 
     if voice is None:
         voice="female3"
@@ -75,10 +78,10 @@ async def tts(voice:str=Query(None), text:str=Query(None)):
 
     
     seq = _text_to_sequence(text)
-    print(seq)
     text_lengths = np.array([len(seq)], dtype=np.int64)
     seq = np.array([seq], dtype=np.int64)
 
+    print(datetime.now())
     if voice=="female1":
         mel = await _run_onnx(tts_onnx_female1, [seq, text_lengths, np.array(1.0, dtype=np.float32)])
         audio = (await _run_onnx(vocoder_onnx_female1, [mel]))[0, 0, :]
@@ -98,12 +101,13 @@ async def tts(voice:str=Query(None), text:str=Query(None)):
         mel = await _run_onnx(tts_onnx_female3, [seq, text_lengths, np.array(1.0, dtype=np.float32)])
         audio = (await _run_onnx(vocoder_onnx_female3, [mel]))[0, 0, :]
     
+    print(datetime.now())
     audio = (32767 * audio).astype(dtype=np.int16)
     
     wav_file = io.BytesIO()
     _save_wav(wav_file, audio)
     wav_file.seek(0)
-
+    print(datetime.now())
     return StreamingResponse(io.BytesIO(wav_file.getvalue()), media_type="audio/wav")
 
 
@@ -122,7 +126,6 @@ def _text_to_sequence(text):
 async def _run_onnx(ort_session, input_vals):
     ort_inputs = {name.name: val for name, val in zip(ort_session.get_inputs(), input_vals)}
     ort_outs = ort_session.run(None, ort_inputs)
-    print(len(ort_outs[0]))
     return ort_outs[0]
 
 

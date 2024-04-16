@@ -6,7 +6,7 @@ from auth import validateToken
 import os
 from models.NotifyReq import NotifyReq
 from models.user import TokenObj
-from datetime import datetime, timedelta
+from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 
 

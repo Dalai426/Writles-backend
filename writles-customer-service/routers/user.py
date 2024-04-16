@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Query,status, BackgroundTasks, Depends, Response
-from auth import validateToken
+from fastapi import APIRouter, Query,status, BackgroundTasks, Depends, Response, Security
+from auth import validateToken, check_key
 from jose import jwt
-from schemas.schemas import groupEntity, userListEntity, userMapEntity
+from schemas.schemas import groupEntity, userListEntity, userMapEntity, userEntity, groupListEntity
 from db_config import collection_name
-from models.user import User, GroupReq, AuthReq, TokenObj
+from models.user import User, GroupReq, AuthReq, TokenObj, ChangePass
 from utils.passwd import hash_password, verify_password
 import utils.email as email
 from datetime import datetime, timedelta
@@ -123,17 +123,46 @@ async def postUser(response:Response,user: User,token: TokenObj = Depends(valida
 @router.post("/update")
 async def postUser(response:Response,user:User,token: TokenObj = Depends(validateToken)):
 
-    if token.device_token is None:
-        response.status_code = status.HTTP_400_BAD_REQUEST
-        response.headers["Content-Type"] = "application/json; charset=utf-8"
-        return {'detail': 'Өөө, Хэрэглэгчийн device-ийн мэдээлэл дутуу !!!'}
 
+    update_fields = {
+    }
+
+    if token.device_token is not None:
+        update_fields["device_token"]=token.device_token
+
+
+    if user.gmail is not None:
+        update_fields["gmail"]=user.gmail 
+
+    
+    if user.name is not None:
+        query = {"$and": [{"name": user.name}, {"group": token.id}]}
+        result = userListEntity(collection_name.user.find(query))
+        if result:
+            response.status_code = status.HTTP_400_BAD_REQUEST
+            response.headers["Content-Type"] = "application/json; charset=utf-8"
+            return {'detail': "Өөө, Хэрэглэгчийн нэр ангид бүртгэлтэй байна !!!"}
+        else :
+            update_fields["name"]=user.name
 
     res=collection_name.user.update_one(
         filter = {"$and": [{"_id":ObjectId(user.id)}, {"group": token.id}]},
-        update = {"$set" : {"device_token" : token.device_token}}
+        update={"$set": update_fields}
     )
-    data={"_id": token.id, "username": token.username,"name":user.name, "device_token":token.device_token}
+
+
+    modified_count = res.modified_count
+    if modified_count==0 :
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        response.headers["Content-Type"] = "application/json; charset=utf-8"
+        return {'detail': 'Өөө, Хэрэглэгчийн мэдээлэл шинэчлэгдсэнгүй !!!'}
+    
+    if user.name is not None:
+        name=user.name
+    else :
+        name=token.name
+
+    data={"_id": token.id, "username": token.username,"name":name, "device_token":token.device_token}
     expire=datetime.utcnow()+timedelta(days=30)
     data.update({"exp":expire})
     encoded_jwt=jwt.encode(data, jwtkey, algorithm=algorithm)
@@ -179,7 +208,6 @@ async def postUser(response:Response,group: GroupReq, user:User):
             return {'detail': "Өөө, Нэвтрэх нэр давхацсан байна !!!"}
   
     
-    print(group.username)
     group.password=hash_password(group.password)
     new_group_data = dict(group)
     new_group_id = collection_name.group.insert_one(new_group_data).inserted_id
@@ -203,6 +231,43 @@ async def postUser(response:Response,group: GroupReq, user:User):
 async def getUsers(response:Response, token: TokenObj = Depends(validateToken)):
     users=userListEntity(collection_name.user.find({"group":token.id}))
     return users
+
+
+@router.get("/getuser")
+async def getUser(response:Response, token: TokenObj = Depends(validateToken)):
+    users=userEntity(collection_name.user.find_one({"group":token.id, "device_token":token.device_token}))
+    return users
+
+
+@router.get("/getgroups")
+async def getGroups(response:Response, gmail:str=Query):
+
+    pipeline = [
+    {"$match": {"gmail": gmail}},
+    {"$addFields": {
+        "groupId": {"$toObjectId": "$group"}
+    }},
+    {"$lookup": {
+        "from": "group",
+        "let": {"groupId": "$groupId"},
+        "pipeline": [
+            {"$match": {"$expr": {"$eq": ["$_id", "$$groupId"]}}}
+        ],
+        "as": "group"
+    }},
+    {"$unwind": "$group"},
+    {"$project": {
+        "_id": "$group._id",
+        "username": "$group.username"
+    }},
+     {"$group": {
+        "_id": "$_id",  
+        "username": {"$first": "$username"}  
+    }}
+    ]
+
+    groups = groupListEntity(list(collection_name.user.aggregate(pipeline)))
+    return groups
 
 
 @router.post("/delete")
@@ -233,3 +298,29 @@ async def senotp(response:Response,background_tasks: BackgroundTasks,gmail:str=Q
         response.status_code = status.HTTP_400_BAD_REQUEST
         response.headers["Content-Type"] = "application/json; charset=utf-8"
         return {'detail': "Өөө, Otp илгээхэд алдаа гарлаа !!!"}
+    
+
+
+@router.post("/update-password",dependencies=[Security(check_key)])
+async def notify(response:Response,req:ChangePass):
+    if req.newPassword is None:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        response.headers["Content-Type"] = "application/json; charset=utf-8"
+        return {'detail': "Өөө, Нууц үгээ оруулаарай !!!"}
+    
+    req.newPassword=hash_password(req.newPassword)
+    res=collection_name.group.update_one(
+        filter = {"_id":ObjectId(req.userId)},
+        update={"$set": {
+            "password":req.newPassword
+        }}
+    )
+
+    modified_count = res.modified_count
+    if modified_count==0 :
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        response.headers["Content-Type"] = "application/json; charset=utf-8"
+        return {'detail': 'Өөө, Амжилтгүй !!!'}
+    
+    return "success"
+
